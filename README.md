@@ -1,1 +1,1 @@
-# SeDriC-Controls
+# Repo for control subsytem
