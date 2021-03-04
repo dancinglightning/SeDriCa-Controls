@@ -3,6 +3,9 @@
 import rospy
 from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Float32
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Path
 from collections import deque
 import numpy as np
 import sys
@@ -207,6 +210,10 @@ y_path=[]
 def x_callback(x_c):
     for i in range(len(x_c.data)):
         x_path.append(x_c.data[i])
+        if len(x_path)>1:
+            if x_path[0]==x_c.data[i]:
+                x_sub.unregister()
+                y_sub.unregister()
 
 def y_callback(y_c):
     for i in range(len(y_c.data)):
@@ -232,20 +239,40 @@ def move_forward(x_0,acc_pub,steer_rate_pub):
     y_dq.popleft()
     v_dq.popleft()
     return x_0,x,y,v,points[0][0],points[0][1]'''
+x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
+def path_callback(path,x_0):
+    l=len(path.poses)
+    points=np.zeros((l,2))
+    velocities=np.zeros((l))
+    for j in range(l):
+        points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
+        points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
+        velocities[j]=1.5
+    x_=np.array([x_0[1]])
+    y_=np.array([x_0[2]])
+    v=np.array([x_0[3]])
+    bcurves=trajectory_gen(points)
+    derivatives=derivative_list(points)
+    for i in range(len(points)-1):
+        (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,points,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+        x_0[0]=0
+    plt.plot(x_,y_)
+    plt.scatter(points[:,0],points[:,1])
+    plt.show()
 
-x_0=np.array([[0],0,0,[1.5],[0],[0],[0],[0],[0]]) #assuming initially straight path
-x_=np.array([0])
-y_=np.array([0])
-v=np.array([1.5])
 rospy.init_node('control_node', anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
 steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
 rate=rospy.Rate(10)
+#x_sub=rospy.Subscriber("x_c_vector",Float32MultiArray,x_callback)
+#y_sub=rospy.Subscriber("y_c_vector",Float32MultiArray,y_callback)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_0)
+rospy.spin()
+'''
 while not rospy.is_shutdown():
-    rospy.Subscriber("x_c_vector",Float32MultiArray,x_callback)
-    rospy.Subscriber("y_c_vector",Float32MultiArray,y_callback)
     #rospy.Subscriber("v_max",Float32,v_callback)
     if len(x_path) and len(y_path):
+        print(str(len(x_path))+" "+str(len(y_path)))
         points=np.zeros((len(x_path),2))
         velocities=np.zeros((len(x_path),1))
         for i in range(len(x_path)):
@@ -259,9 +286,9 @@ while not rospy.is_shutdown():
             x_0[0]=0
         plt.plot(x_,y_)
         plt.scatter(points[:,0],points[:,1])
-        rate.sleep()
+        plt.show()
+        rate.sleep()'''
 
-plt.show()
 
 
 '''bcurves=trajectory_gen(points)
