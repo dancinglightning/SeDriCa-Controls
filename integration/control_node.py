@@ -9,11 +9,11 @@ from nav_msgs.msg import Path
 from collections import deque
 import numpy as np
 import sys
+import os
 sys.path.append('../../')
 import do_mpc
 from casadi import *
 import matplotlib.pyplot as plt
-
 def get_bezier_coef(points):
     n = len(points) - 1
 
@@ -79,7 +79,7 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
     k=0.1
     fn=curves[i]
     d=derivatives[i]
-    vmax_i=max(velocities[i],velocities[i+1])
+    vmax_i=velocities[i]
     #state variables
     psi=model.set_variable(var_type='_x',var_name='psi',shape=(1,1))
     xc=model.set_variable(var_type='_x',var_name='xc',shape=(1,1))
@@ -99,7 +99,7 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
     #model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
                                                      #+a_s**2+w_s**2+(v-0.9*vmax_i)**2))
     model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
-                                                     +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
+                                                     +a_s**2+w_s**2)+(v-0.8*velocities[i])**2)
     state_now=vertcat(psi,xc, yc, v, theta, phi, delta,a_s,w_s)
     #B=t_s*vertcat((0.9*vmax_i)/((d(psi)[0])**2+(d(psi)[1])**2)**0.5,v*np.cos(theta), v*np.sin(theta), a* np.cos(delta)-(2.0/m)*Fyf*np.sin(delta), phi,
      #             (1.0/J)*(La*(m*a*np.sin(delta)+2*Fyf*np.cos(delta))-2*Lb*Fyr), omega,(1/t_s)*(a-a_s),(1/t_s)*(omega-w_s))
@@ -191,8 +191,8 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
         #x_0=simulator.data['_x'][-1]
         return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub)
 
-x_path=[]
-y_path=[]
+velocities=[]
+points=[]
 #for j in range(30):
  #   velocities[j][0]=1.5
 '''with open("coordinates.csv") as csv_file:
@@ -219,8 +219,9 @@ def y_callback(y_c):
     for i in range(len(y_c.data)):
         y_path.append(y_c.data[i])
 
-#def v_callback(v_max):
- #   v_dq.append(v_max.data)
+def v_callback(v_max,velocities):
+    velocities.append(v_max.data)
+    #print("***check***")
 '''
 def move_forward(x_0,acc_pub,steer_rate_pub):
     for j in range(30):
@@ -239,25 +240,64 @@ def move_forward(x_0,acc_pub,steer_rate_pub):
     y_dq.popleft()
     v_dq.popleft()
     return x_0,x,y,v,points[0][0],points[0][1]'''
-x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
-def path_callback(path,x_0):
+x_initial=[[0],[0],[0],[1.5],[0],[0],[0],[0],[0]]
+def path_callback(path,x_initial):
+    x_0=np.zeros((len(x_initial),1))
+    for i in range(len(x_initial)):
+        x_0[i][0]=x_initial[i][0]
     l=len(path.poses)
-    points=np.zeros((l,2))
-    velocities=np.zeros((l))
+    all_points=np.zeros((l,2))
+    #velocities=np.zeros((l))
+    if len(points):
+        if points[0][0]==path.poses[0].pose.position.y:
+            print("###repetition detected###")
+            path_sub.unregister()
+            print("#######################################path unregistered#######################################")
+            #os.system("rosrun rqt_graph rqt_graph")
     for j in range(l):
-        points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
-        points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
-        velocities[j]=1.5
+        all_points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
+        all_points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
+        points.append([path.poses[j].pose.position.y,path.poses[j].pose.position.x])
+        #velocities[j]=1.5
     x_=np.array([x_0[1]])
     y_=np.array([x_0[2]])
     v=np.array([x_0[3]])
-    bcurves=trajectory_gen(points)
-    derivatives=derivative_list(points)
-    for i in range(len(points)-1):
-        (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,points,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+    first,rest=all_points[:50,:],all_points[49:,:]
+    #velocities=[1.5]
+    while first.shape[0]==50:
+        bcurves=trajectory_gen(first)
+        derivatives=derivative_list(first)
+        for i in range(len(first)-1):
+            #rospy.Subscriber("v_max",Float32,v_callback,velocities)
+            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+            x_0[0]=0
+        #velocities=velocities[-1:]
+        if rest.shape[0]>50:
+            first,rest=rest[:50,:],rest[49:,:]
+        else:
+            #print("*******check******")
+            break
+    bcurves=trajectory_gen(rest)
+    derivatives=derivative_list(rest)
+    for i in range(len(rest)-1):
+        #rospy.Subscriber("v_max",Float32,v_callback,velocities)
+        (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
         x_0[0]=0
-    plt.plot(x_,y_)
-    plt.scatter(points[:,0],points[:,1])
+    for i in range(len(x_initial)):
+        x_initial[i][0]=x_0[i][0]
+    fig,(ax1,ax2)=plt.subplots(2,1,sharex=True)
+    ax1.plot(x_,y_)
+    ax1.scatter(all_points[:,0],all_points[:,1])
+    ax2.plot(x_,v)
+    #print(len(all_points))
+    #print(len(velocities))
+    ax2.plot(all_points[:,0],velocities[:l],'ro')
+    opt=velocities[:l]
+    for i in range(len(opt)):
+        opt[i]=0.8*opt[i]
+    ax2.plot(all_points[:,0],opt,'bo')
+    ax1.set(xlabel='x',ylabel='y')
+    ax2.set(xlabel='x',ylabel='v')
     plt.show()
 
 rospy.init_node('control_node', anonymous=True)
@@ -266,7 +306,8 @@ steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
 rate=rospy.Rate(10)
 #x_sub=rospy.Subscriber("x_c_vector",Float32MultiArray,x_callback)
 #y_sub=rospy.Subscriber("y_c_vector",Float32MultiArray,y_callback)
-path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_0)
+vel_sub=rospy.Subscriber("/v_max",Float32,v_callback,velocities)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_initial)
 rospy.spin()
 '''
 while not rospy.is_shutdown():
