@@ -75,7 +75,7 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
     m=200
     Cy=0.1
     t_s=0.01 #sample time
-    N=80
+    N=70
     k=0.1
     fn=curves[i]
     d=derivatives[i]
