@@ -75,7 +75,7 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
     m=200
     Cy=0.1
     t_s=0.01 #sample time
-    N=70
+    N=80
     k=0.1
     fn=curves[i]
     d=derivatives[i]
@@ -242,6 +242,7 @@ def move_forward(x_0,acc_pub,steer_rate_pub):
     return x_0,x,y,v,points[0][0],points[0][1]'''
 x_initial=[[0],[0],[0],[1.5],[0],[0],[0],[0],[0]]
 def path_callback(path,x_initial):
+    path_repeat=False
     x_0=np.zeros((len(x_initial),1))
     for i in range(len(x_initial)):
         x_0[i][0]=x_initial[i][0]
@@ -251,54 +252,50 @@ def path_callback(path,x_initial):
     if len(points):
         if points[0][0]==path.poses[0].pose.position.y:
             print("###repetition detected###")
+            path_repeat=True
             path_sub.unregister()
             print("#######################################path unregistered#######################################")
             #os.system("rosrun rqt_graph rqt_graph")
-    for j in range(l):
-        all_points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
-        all_points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
-        points.append([path.poses[j].pose.position.y,path.poses[j].pose.position.x])
-        #velocities[j]=1.5
-    x_=np.array([x_0[1]])
-    y_=np.array([x_0[2]])
-    v=np.array([x_0[3]])
-    first,rest=all_points[:50,:],all_points[49:,:]
-    #velocities=[1.5]
-    while first.shape[0]==50:
-        bcurves=trajectory_gen(first)
-        derivatives=derivative_list(first)
-        for i in range(len(first)-1):
-            #rospy.Subscriber("v_max",Float32,v_callback,velocities)
-            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+    if not path_repeat:
+        for j in range(l):
+            all_points[j][0]=path.poses[j].pose.position.y-path.poses[0].pose.position.y
+            all_points[j][1]=path.poses[j].pose.position.x-path.poses[0].pose.position.x
+            points.append([path.poses[j].pose.position.y,path.poses[j].pose.position.x])
+            #velocities[j]=1.5
+        x_=np.array([x_0[1]])
+        y_=np.array([x_0[2]])
+        v=np.array([x_0[3]])
+        first,rest=all_points[:50,:],all_points[49:,:]
+        #velocities=[1.5]
+        while first.shape[0]==50:
+            bcurves=trajectory_gen(first)
+            derivatives=derivative_list(first)
+            for i in range(len(first)-1):
+                (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+                x_0[0]=0
+            if rest.shape[0]>50:
+                first,rest=rest[:50,:],rest[49:,:]
+            else:
+                break
+        bcurves=trajectory_gen(rest)
+        derivatives=derivative_list(rest)
+        for i in range(len(rest)-1):
+            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
             x_0[0]=0
-        #velocities=velocities[-1:]
-        if rest.shape[0]>50:
-            first,rest=rest[:50,:],rest[49:,:]
-        else:
-            #print("*******check******")
-            break
-    bcurves=trajectory_gen(rest)
-    derivatives=derivative_list(rest)
-    for i in range(len(rest)-1):
-        #rospy.Subscriber("v_max",Float32,v_callback,velocities)
-        (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
-        x_0[0]=0
-    for i in range(len(x_initial)):
-        x_initial[i][0]=x_0[i][0]
-    fig,(ax1,ax2)=plt.subplots(2,1,sharex=True)
-    ax1.plot(x_,y_)
-    ax1.scatter(all_points[:,0],all_points[:,1])
-    ax2.plot(x_,v)
-    #print(len(all_points))
-    #print(len(velocities))
-    ax2.plot(all_points[:,0],velocities[:l],'ro')
-    opt=velocities[:l]
-    for i in range(len(opt)):
-        opt[i]=0.8*opt[i]
-    ax2.plot(all_points[:,0],opt,'bo')
-    ax1.set(xlabel='x',ylabel='y')
-    ax2.set(xlabel='x',ylabel='v')
-    plt.show()
+        for i in range(len(x_initial)):
+            x_initial[i][0]=x_0[i][0]
+        fig,(ax1,ax2)=plt.subplots(2,1,sharex=True)
+        ax1.plot(x_,y_)
+        ax1.scatter(all_points[:,0],all_points[:,1])
+        ax2.plot(x_,v)
+        ax2.plot(all_points[:,0],velocities[:l],'ro')
+        opt=velocities[:l]
+        for i in range(len(opt)):
+            opt[i]=0.8*opt[i]
+        ax2.plot(all_points[:,0],opt,'bo')
+        ax1.set(xlabel='x',ylabel='y')
+        ax2.set(xlabel='x',ylabel='v')
+        plt.show()
 
 rospy.init_node('control_node', anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
