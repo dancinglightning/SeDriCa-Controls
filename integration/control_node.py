@@ -65,7 +65,7 @@ def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
-def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub):
+def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub):
     model_type='discrete'
     model=do_mpc.model.Model(model_type)
     J=1000
@@ -127,8 +127,8 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub
     mterm = model.aux['cost']
     lterm = model.aux['cost']
     mpc.set_objective(mterm=mterm, lterm=lterm)
-    mpc.set_rterm(a=0.1)
-    mpc.set_rterm(omega=0.1)
+    mpc.set_rterm(a=0.01)
+    mpc.set_rterm(omega=0.01)
     # 'tube' from path planning
     #mpc.bounds['lower','_x','xc']=x_i[0]-1e-19
     mpc.bounds['lower','_x','yc']=min(points[i+1][1],x_0[2])-1.5
@@ -150,6 +150,10 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub
     mpc.bounds['upper','_x','a_s']=10
     mpc.bounds['upper','_x','w_s']=10
     '''
+    mpc.bounds['lower','_u','omega']=-5
+    mpc.bounds['upper','_u','omega']=5
+    mpc.bounds['lower','_u','a']=-1
+    mpc.bounds['upper','_u','a']=1
     mpc.setup()
     #estimator=do_mpc.estimator.StateFeedback(model)
     simulator = do_mpc.simulator.Simulator(model)
@@ -182,16 +186,17 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub
         if x_0[1]>=points[i+1][0]:
             break
         # x_0=estimator.make_step(y_0)
-    theta=vertcat(theta,simulator.data['_x','theta',-1])
+    acc=vertcat(acc,simulator.data['_u','a',-1])
     x=vertcat(x,simulator.data['_x','xc',-1])
     y=vertcat(y,simulator.data['_x','yc',-1])
     vel=vertcat(vel,simulator.data['_x','v',-1])
+    steer_rate=vertcat(steer_rate,simulator.data['_u','omega',-1])
     #z=vertcat(z,simulator.data['_x','theta',-1])
     if x_0[1]>=points[i+1][0]:
-        return x_0,x,y,vel
+        return x_0,x,y,vel,acc,steer_rate
     else:
         #x_0=simulator.data['_x'][-1]
-        return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
+        return control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
 
 velocities=[1.5]
 path_points=[]
@@ -228,12 +233,14 @@ def path_callback(path,x_initial):
         x_=np.array([x_0[1]])
         y_=np.array([x_0[2]])
         v=np.array([x_0[3]])
+        a=np.array([x_0[7]])
+        s_r=np.array([x_0[-1]])
         first,rest=now_points[:50,:],now_points[49:,:]
         while first.shape[0]==50:
             bcurves=trajectory_gen(first)
             derivatives=derivative_list(first)
             for i in range(len(first)-1):
-                (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
+                (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,first,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
                 x_0[0]=0
             if rest.shape[0]>50:
                 first,rest=rest[:50,:],rest[49:,:]
@@ -242,21 +249,25 @@ def path_callback(path,x_initial):
         bcurves=trajectory_gen(rest)
         derivatives=derivative_list(rest)
         for i in range(len(rest)-1):
-            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
+            (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,rest,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
             x_0[0]=0
         for i in range(len(x_initial)):
             x_initial[i][0]=x_0[i][0]
-        fig,(ax1,ax2)=plt.subplots(2,1,sharex=True)
-        ax1.plot(x_,y_)
-        ax1.scatter(now_points[:,0],now_points[:,1])
-        ax2.plot(x_,v)
-        ax2.plot(now_points[:,0],velocities[:l],'ro')
+        fig,ax=plt.subplots(2,2)
+        ax[0][0].plot(x_,y_)
+        ax[0][0].scatter(now_points[:,0],now_points[:,1])
+        ax[0][1].plot(x_,v)
+        ax[0][1].plot(now_points[:,0],velocities[:l],'ro')
         opt=velocities[:l]
         for i in range(len(opt)):
             opt[i]=0.8*opt[i]
-        ax2.plot(now_points[:,0],opt,'bo')
-        ax1.set(xlabel='x',ylabel='y')
-        ax2.set(xlabel='x',ylabel='v')
+        ax[0][1].plot(now_points[:,0],opt,'bo')
+        ax[1][0].plot(x_,a)
+        ax[1][1].plot(x_,s_r)
+        ax[0][0].set(xlabel='x',ylabel='y')
+        ax[0][1].set(xlabel='x',ylabel='v')
+        ax[1][0].set(xlabel='x',ylabel='a')
+        ax[1][1].set(xlabel='x',ylabel='steer rate')
         plt.show()
 
 rospy.init_node('control_node', anonymous=True)
