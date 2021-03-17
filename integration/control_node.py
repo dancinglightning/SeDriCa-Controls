@@ -65,7 +65,7 @@ def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
-def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub):
+def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub):
     model_type='discrete'
     model=do_mpc.model.Model(model_type)
     J=1000
@@ -169,8 +169,11 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
     N_u=N
     for j in range(N_u):
         u0=mpc.make_step(x_0)
-        acc_pub.publish(u0[0][0])
-        steer_rate_pub.publish(u0[1][0])
+        if u0[0][0]>=0:
+            acc_pub.publish(u0[0][0])
+        else:
+            brake_pub.publish((-1)*u0[0][0])
+        steer_pub.publish(u0[1][0]*t_s)
         x_0=simulator.make_step(u0)
         # with open('control_outputs.csv',mode='a') as op_file:
         #     op=csv.writer(op_file,delimiter=',')
@@ -188,7 +191,7 @@ def control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rat
         return x_0,x,y,vel
     else:
         #x_0=simulator.data['_x'][-1]
-        return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,steer_rate_pub)
+        return control(x_0,i,x,y,vel,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
 
 velocities=[1.5]
 path_points=[]
@@ -230,7 +233,7 @@ def path_callback(path,x_initial):
             bcurves=trajectory_gen(first)
             derivatives=derivative_list(first)
             for i in range(len(first)-1):
-                (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+                (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,first,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
                 x_0[0]=0
             if rest.shape[0]>50:
                 first,rest=rest[:50,:],rest[49:,:]
@@ -239,7 +242,7 @@ def path_callback(path,x_initial):
         bcurves=trajectory_gen(rest)
         derivatives=derivative_list(rest)
         for i in range(len(rest)-1):
-            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,steer_rate_pub)
+            (x_0,x_,y_,v)=control(x_0,i,x_,y_,v,rest,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
             x_0[0]=0
         for i in range(len(x_initial)):
             x_initial[i][0]=x_0[i][0]
@@ -258,7 +261,8 @@ def path_callback(path,x_initial):
 
 rospy.init_node('control_node', anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
-steer_rate_pub = rospy.Publisher('steer_rate', Float32, queue_size=10)
+brake_pub = rospy.Publisher('brake', Float32, queue_size=10)
+steer_pub = rospy.Publisher('steer', Float32, queue_size=10)
 rate=rospy.Rate(10)
 vel_sub=rospy.Subscriber("/velocity_array",Float64MultiArray,v_callback,packed)
 path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_initial)
