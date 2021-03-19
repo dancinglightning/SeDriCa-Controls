@@ -65,6 +65,7 @@ def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
+
 def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,acc_pub,brake_pub,steer_pub):
     model_type='discrete'
     model=do_mpc.model.Model(model_type)
@@ -78,7 +79,7 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     k=0.1
     fn=curves[i]
     d=derivatives[i]
-    vmax_i=velocities[i]
+    vmax_i=max(velocities[i],velocities[i+1])
     #state variables
     psi=model.set_variable(var_type='_x',var_name='psi',shape=(1,1))
     xc=model.set_variable(var_type='_x',var_name='xc',shape=(1,1))
@@ -98,7 +99,7 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     #model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
                                                      #+a_s**2+w_s**2+(v-0.9*vmax_i)**2))
     model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
-                                                     +a_s**2+w_s**2)+(v-0.8*velocities[i])**2)
+                                                     +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
     state_now=vertcat(psi,xc, yc, v, theta, phi, delta,a_s,w_s)
     #B=t_s*vertcat((0.9*vmax_i)/((d(psi)[0])**2+(d(psi)[1])**2)**0.5,v*np.cos(theta), v*np.sin(theta), a* np.cos(delta)-(2.0/m)*Fyf*np.sin(delta), phi,
      #             (1.0/J)*(La*(m*a*np.sin(delta)+2*Fyf*np.cos(delta))-2*Lb*Fyr), omega,(1/t_s)*(a-a_s),(1/t_s)*(omega-w_s))
@@ -127,8 +128,8 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     mterm = model.aux['cost']
     lterm = model.aux['cost']
     mpc.set_objective(mterm=mterm, lterm=lterm)
-    mpc.set_rterm(a=0.01)
-    mpc.set_rterm(omega=0.01)
+    mpc.set_rterm(a=0.1)
+    mpc.set_rterm(omega=0.1)
     # 'tube' from path planning
     #mpc.bounds['lower','_x','xc']=x_i[0]-1e-19
     mpc.bounds['lower','_x','yc']=min(points[i+1][1],x_0[2])-1.5
@@ -203,16 +204,17 @@ path_points=[]
 c=1
 packed=[velocities,c]
 
-def v_callback(v_arr,packed):
-    l=len(v_arr.data)
-    packed[0]=packed[0][:packed[1]]
-    for i in range(l):
-        packed[0].append(v_arr.data[i])
-    packed[1]+=1
+def v_callback(v_arr,velocities):
+    velocities.append(v_arr.data[0])
+    '''l=len(v_arr.data)
+                packed[0]=packed[0][:packed[1]]
+                for i in range(l):
+                    packed[0].append(v_arr.data[i])
+                packed[1]+=1'''
 
 x_initial=[[0],[0],[0],[1.5],[0],[0],[0],[0],[0]]
 def path_callback(path,x_initial):
-    velocities=packed[0]
+    vel=packed[0]
     path_repeat=False
     x_0=np.zeros((len(x_initial),1))
     for i in range(len(x_initial)):
@@ -240,7 +242,7 @@ def path_callback(path,x_initial):
             bcurves=trajectory_gen(first)
             derivatives=derivative_list(first)
             for i in range(len(first)-1):
-                (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,first,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
+                (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,first,bcurves,derivatives,vel,acc_pub,brake_pub,steer_pub)
                 x_0[0]=0
             if rest.shape[0]>50:
                 first,rest=rest[:50,:],rest[49:,:]
@@ -249,7 +251,7 @@ def path_callback(path,x_initial):
         bcurves=trajectory_gen(rest)
         derivatives=derivative_list(rest)
         for i in range(len(rest)-1):
-            (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,rest,bcurves,derivatives,velocities,acc_pub,brake_pub,steer_pub)
+            (x_0,x_,y_,v,a,s_r)=control(x_0,i,x_,y_,v,a,s_r,rest,bcurves,derivatives,vel,acc_pub,brake_pub,steer_pub)
             x_0[0]=0
         for i in range(len(x_initial)):
             x_initial[i][0]=x_0[i][0]
@@ -257,7 +259,7 @@ def path_callback(path,x_initial):
         ax[0][0].plot(x_,y_)
         ax[0][0].scatter(now_points[:,0],now_points[:,1])
         ax[0][1].plot(x_,v)
-        ax[0][1].plot(now_points[:,0],velocities[:l],'ro')
+        ax[0][1].plot(now_points[:,0],vel[:l],'ro')
         opt=velocities[:l]
         for i in range(len(opt)):
             opt[i]=0.8*opt[i]
