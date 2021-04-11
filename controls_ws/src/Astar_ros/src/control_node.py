@@ -157,6 +157,12 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     mpc.bounds['lower','_u','a']=-1
     mpc.bounds['upper','_u','a']=1
     mpc.setup()
+
+    # *********
+    # scaling can be done
+    # uncertainities
+    # ***********
+
     #estimator=do_mpc.estimator.StateFeedback(model)
     simulator = do_mpc.simulator.Simulator(model)
     simulator.set_param(t_step = t_s)
@@ -173,6 +179,11 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     mpc.set_initial_guess()
     mpc.reset_history()
     N_u=N
+
+    # ********
+    # graphics here
+    # ********
+    
     for j in range(N_u):
         u0=mpc.make_step(x_0)
         if u0[0][0]>=0:
