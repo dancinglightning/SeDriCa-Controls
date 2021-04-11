@@ -278,8 +278,6 @@ class Simulator(do_mpc.model.IteratedVariables):
         :return: None
         :rtype: None
         """
-        # print("F")
-        # exit()
         import os
         assert isinstance(tvp_fun(0), structure.DMStruct), 'tvp_fun has incorrect return type.'
         assert self.get_tvp_template().labels() == tvp_fun(0).labels(), 'Incorrect output of tvp_fun. Use get_tvp_template to obtain the required structure.'

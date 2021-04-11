@@ -207,9 +207,6 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables, IndexedPro
 
     @opt_x_num.setter
     def opt_x_num(self, val):
-        print("]]]]]]]]]]]]]]")
-        print(val)
-        print("]]]]]]]]]]]]]]")
         self._opt_x_num = val
 
     @property
@@ -847,8 +844,6 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables, IndexedPro
         """
         assert self.flags['setup'] == True, 'MPC was not setup yet. Please call MPC.setup().'
 
-        print(self._x_scaling)
-        print("///////////")
         self.opt_x_num['_x'] = self._x0.cat/self._x_scaling
         self.opt_x_num['_u'] = self._u0.cat/self._u_scaling
         self.opt_x_num['_z'] = self._z0.cat/self._z_scaling
@@ -1076,8 +1071,6 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables, IndexedPro
 
                     # U regularization:
                     if k == 0:
-                        print(type(obj))
-                        print(type(self.rterm_factor.cat.T), type((opt_x['_u', 0, s] - opt_p['_u_prev'] / self._u_scaling)**2))
                         obj += mtimes(self.rterm_factor.cat.T, ((opt_x['_u', 0, s] - opt_p['_u_prev'] / self._u_scaling)**2))
                     else:
                         obj += mtimes(self.rterm_factor.cat.T, ((opt_x['_u', k, s]-opt_x['_u', k-1, parent_scenario[k][s]])**2))

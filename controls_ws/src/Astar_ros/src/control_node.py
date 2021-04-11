@@ -206,7 +206,6 @@ c=1
 packed=[velocities,c]
 
 def v_callback(v_arr):
-	pass
 #     velocities.append(v_arr.data[0])
     # '''l=len(v_arr.data)
     #             packed[0]=packed[0][:packed[1]]
@@ -215,7 +214,7 @@ def v_callback(v_arr):
     #             packed[1]+=1'''
 
 x_initial=[[0],[0],[0],[1.5],[0],[0],[0],[0],[0]]
-def path_callback(path,x_initial):
+def path_callback(path):
     vel=packed[0]
     path_repeat=False
     x_0=np.zeros((len(x_initial),1))
@@ -280,5 +279,5 @@ brake_pub = rospy.Publisher('brake', Float32, queue_size=10)
 steer_pub = rospy.Publisher('steer', Float32, queue_size=10)
 rate=rospy.Rate(10)
 vel_sub=rospy.Subscriber("/velocity_array",Float64MultiArray,v_callback)
-path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,x_initial)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback)
 rospy.spin()

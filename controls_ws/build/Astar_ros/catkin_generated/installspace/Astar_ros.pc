@@ -1,0 +1,8 @@
+prefix=/home/student/controls/SeDriCa-Controls/controls_ws/install
+
+Name: Astar_ros
+Description: Description of Astar_ros
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

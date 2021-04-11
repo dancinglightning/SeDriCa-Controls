@@ -1,0 +1,2 @@
+Astar_ros:velocity_plan
+-DCATKIN_DEVEL_PREFIX=/home/student/controls/SeDriCa-Controls/controls_ws/devel -DCMAKE_INSTALL_PREFIX=/home/student/controls/SeDriCa-Controls/controls_ws/install -G Unix Makefiles

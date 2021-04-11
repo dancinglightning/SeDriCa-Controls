@@ -491,12 +491,6 @@ class Optimizer(IndexedProperty):
         """
         assert self.flags['setup'] == True, 'optimizer was not setup yet. Please call optimizer.setup().'
 
-        # print(";;;;;;;;;;;;;;;;;")
-        # print("self.lb_opt_x")
-        # print(self.lb_opt_x)
-        # print("not haga hua")
-        # print(";;;;;;;;;;;;;;;;;")
-        # exit()
         r = self.S(x0=self.opt_x_num, lbx=self.lb_opt_x, ubx=self.ub_opt_x,
                    ubg=self.cons_ub, lbg=self.cons_lb, p=self.opt_p_num)
         # Note: .master accesses the underlying vector of the structure.
