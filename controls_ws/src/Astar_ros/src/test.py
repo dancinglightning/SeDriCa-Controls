@@ -155,6 +155,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	return x_0,x,y,vel,acc,steer_rate
 
 def callback(path,v_arr):
+	print("not entering this loop")
 	velocities.append(v_arr.data[0])
 	x_=np.array(x_ini[1])
 	y_=np.array([x_ini[2]])
