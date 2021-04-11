@@ -496,6 +496,16 @@ class MPC(do_mpc.optimizer.Optimizer, do_mpc.model.IteratedVariables, IndexedPro
         self.lterm_fun = Function('lterm', [_x, _u, _z, _tvp, _p], [lterm])
 
         self.flags['set_objective'] = True
+        # print('')
+        # print('')
+        # print('')
+        # print('='*100)
+        # print(type(self.model.x))
+        # print(self.model.x.__SX__())
+        # print('='*100)
+        # print('')
+        # print('')
+        # print('')
 
     def set_rterm(self, **kwargs):
         """Set the penality factor for the inputs. Call this function with keyword argument refering to the input names in
