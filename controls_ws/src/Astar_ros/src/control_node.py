@@ -111,7 +111,7 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     omega=model.set_variable(var_type='_u',var_name='omega',shape=(1,1))
     model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2 + a_s**2+w_s**2+(v-0.9*vmax_i)**2))
     # model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
-                                                    # +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
+    # +a_s**2+w_s**2)+(v-0.8*velocities[i+1])**2)
     state_now=vertcat(psi,xc, yc, v, theta, phi, delta,a_s,w_s)
     # B=t_s*vertcat((0.9*vmax_i)/((d(psi)[0])**2+(d(psi)[1])**2)**0.5,v*np.cos(theta), v*np.sin(theta), a* np.cos(delta)-(2.0/m)*Fyf*np.sin(delta), phi,
     #             (1.0/J)*(La*(m*a*np.sin(delta)+2*Fyf*np.cos(delta))-2*Lb*Fyr), omega,(1/t_s)*(a-a_s),(1/t_s)*(omega-w_s))
@@ -186,7 +186,6 @@ def control(x_0,i,x,y,vel,acc,steer_rate,points,curves,derivatives,velocities,ac
     mpc.set_initial_guess()
     mpc.reset_history()
     N_u=N
-
 
     # Customizing Matplotlib:
     # mpl.rcParams['font.size'] = 18
