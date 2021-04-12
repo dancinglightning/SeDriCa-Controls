@@ -61,7 +61,7 @@ def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
-def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_pub,steer_pub,brake_pub):
+def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub):
 	model_type='discrete'
 	model=do_mpc.model.Model(model_type)
 	J=1000
@@ -74,7 +74,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	k=0.1
 	fn=curves[0]
 	d=derivatives[0]
-	vmax_i=max(velocities[0],velocities[1])
+	vmax_i=velocities[0]
 	#state variables
 	psi=model.set_variable(var_type='_x',var_name='psi',shape=(1,1))
 	xc=model.set_variable(var_type='_x',var_name='xc',shape=(1,1))
@@ -91,7 +91,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	a=model.set_variable(var_type='_u',var_name='a',shape=(1,1))
 	omega=model.set_variable(var_type='_u',var_name='omega',shape=(1,1))
 	model.set_expression(expr_name='cost', expr=sum1((xc-fn(psi)[0])**2+100*(yc-fn(psi)[1])**2+100*theta**2+200*(np.tan(theta)-d(psi)[1]/d(psi)[0])**2
-                                                     +a_s**2+w_s**2)+(v-0.8*velocities[1])**2)
+                                                     +a_s**2+w_s**2)+(v-0.8*vmax_i)**2)
 	state_now=vertcat(psi,xc, yc, v, theta, phi, delta,a_s,w_s)
 	B=t_s*vertcat(k,v*np.cos(theta), v*np.sin(theta), a* np.cos(delta)-(2.0/m)*Fyf*np.sin(delta), phi,
                   (1.0/J)*(La*(m*a*np.sin(delta)+2*Fyf*np.cos(delta))-2*Lb*Fyr), omega,(1/t_s)*(a-a_s),(1/t_s)*(omega-w_s))
@@ -120,10 +120,10 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	mpc.set_objective(mterm=mterm, lterm=lterm)
 	mpc.set_rterm(a=0.01)
 	mpc.set_rterm(omega=0.01)
-	mpc.bounds['lower','_x','yc']=min(points[i+1][1],x_0[2])-1.5
+	mpc.bounds['lower','_x','yc']=min(points[1][1],x_0[2])-1.5
 	mpc.bounds['lower','_x','v']=0 #max reverse speed in m/s
 	mpc.bounds['lower','_x','theta']=-np.pi/2-1e-2
-	mpc.bounds['upper','_x','yc']=max(points[i+1][1],x_0[2])+1.5
+	mpc.bounds['upper','_x','yc']=max(points[1][1],x_0[2])+1.5
 	mpc.bounds['upper','_x','theta']=np.pi/2 + 1e-2
 	mpc.bounds['upper','_x','v']=vmax_i
 	mpc.bounds['lower','_u','omega']=-5
@@ -140,13 +140,14 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	mpc.u0['omega']=x_0[-1]
 	mpc.set_initial_guess()
 	mpc.reset_history()
-	u0=mpc.make_step(x_0)
-	if u0[0][0]>=0:
-		acc_pub.publish(u0[0][0])
-	else:
-		brake_pub.publish((-1)*u0[0][0])
-	steer_pub.publish(u0[1][0]*t_s)
-	x_0=simulator.make_step(u0)
+	for i in range(10):
+		u0=mpc.make_step(x_0)
+		if u0[0][0]>=0:
+			acc_pub.publish(u0[0][0])
+		else:
+			brake_pub.publish((-1)*u0[0][0])
+		steer_pub.publish(u0[1][0]*t_s)
+		x_0=simulator.make_step(u0)
 	acc=vertcat(acc,simulator.data['_u','a',-1])
 	x=vertcat(x,simulator.data['_x','xc',-1])
 	y=vertcat(y,simulator.data['_x','yc',-1])
@@ -154,44 +155,35 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	steer_rate=vertcat(steer_rate,simulator.data['_u','omega',-1])
 	return x_0,x,y,vel,acc,steer_rate
 
-def callback(path,v_arr):
-	print("aa gya!!!!!!!!")
-	velocities.append(v_arr.data[0])
-	x_=np.array(x_ini[1])
-	y_=np.array([x_ini[2]])
-	v=np.array([x_ini[3]])
-	a=np.array([x_ini[7]])
-	s_r=np.array([x_ini[-1]])
-	all_points=[]
-	points=np.zeros((2,2))
+def v_callback(v_arr,x_0):
+	velocities[0]=v_arr.data[0]
+	x=np.array(x_0[1])
+	y=np.array(x_0[2])
+	v=np.array(x_0[3])
+	a=np.array(x_0[7])
+	s_r=np.array(x_0[-1])
+	bcurves=trajectory_gen(points)
+	derivatives=derivative_list(points)
+	x_0,x,y,v,a,s_r=control(x_0,x,y,v,a,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub)
+	plt.plot(x,y)
+	plt.scatter(points[:,0],points[:,1])
+	plt.show()
+
+
+def path_callback(path):
 	for i in range(2):
 		points[i][0]=path.poses[i].pose.position.y-path.poses[0].pose.position.y
 		points[i][1]=path.poses[i].pose.position.x-path.poses[0].pose.position.x
-		all_points.append([points[i][0],points[i][1]])
-	bcurves=trajectory_gen(points)
-	ders=derivative_list(points)
-	x_ini,x_,y_,v,a,s_r=control(x_ini,x_,y_,v,a,s_r,bcurves,ders,points,velocities,acc_pub,steer_pub,brake_pub)
-	fig,ax=plt.subplots(2,2)
-	ax[0][0].plot(x_,y_)
-	ax[0][0].scatter(all_points[:,0],all_points[:,1])
-	ax[0][1].plot(x_,v)
-	ax[0][1].plot(all_points[:,0],velocities,'ro')
-	ax[1][0].plot(x_,a)
-	ax[1][1].plot(x_,s_r)
-	ax[0][0].set(xlabel='x',ylabel='y')
-	ax[0][1].set(xlabel='x',ylabel='v')
-	ax[1][0].set(xlabel='x',ylabel='a')
-	ax[1][1].set(xlabel='x',ylabel='steer rate')
-	plt.show()
 
-x_ini=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
+x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
 velocities=[1.5]
+points=np.zeros((2,2))
+all_points=[]
 rospy.init_node('debug_node',anonymous=True)
-path_sub=message_filters.Subscriber("/A_star_path",Path)
-vel_sub=message_filters.Subscriber("/velocity_plan",Float64MultiArray)
-ts = message_filters.ApproximateTimeSynchronizer([path_sub, vel_sub],1,0.1,allow_headerless=True)
-ts.registerCallback(callback)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
 brake_pub = rospy.Publisher('brake', Float32, queue_size=10)
 steer_pub = rospy.Publisher('steer', Float32, queue_size=10)
+rate=rospy.Rate(10)
+vel_sub=rospy.Subscriber("/velocity_plan",Float64MultiArray,v_callback,x_0)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback)
 rospy.spin()

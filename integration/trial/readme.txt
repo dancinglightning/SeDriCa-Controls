@@ -1,2 +1,1 @@
-added a new file debug.py, havent tested it yet (like dry run bhi nhi kiya hai), will remove it if needed.
-no progress on control_node.py as there weren't updates on git about the callback being merged for velocity and path
+in the control function putting u0=mpc.make_step(x_0) without a for loop seemed to not produce any movement at all, have set 10 iterations for now.
