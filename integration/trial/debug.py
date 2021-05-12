@@ -11,7 +11,7 @@ sys.path.append('../../')
 import do_mpc
 from casadi import *
 import matplotlib.pyplot as plt
-import message_filters
+import csv
 
 def get_bezier_coef(points):
     n = len(points) - 1
@@ -50,31 +50,35 @@ def get_bezier_cubic(points):
         for i in range(len(points) - 1)
     ]
 
+# return derivative of the cubic function with given coefficients
 def derivative_bezier(a,b,c,d):
     return lambda t: np.power(1-t,2)*a*(-3)+3*b*(np.power(1-t,2)-2*t*(1-t))+3*c*(2*t*(1-t)-np.power(t,2))+3*d*np.power(t,2)
 
+# return derivative for each consecutive points
 def derivative_list(points):
     A,B=get_bezier_coef(points)
     return [derivative_bezier(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
+# return list of lambda functions for each consecutive points
 def trajectory_gen(points):
     A,B=get_bezier_coef(points)
     return [get_cubic(points[i],A[i],B[i],points[i+1]) for i in range(len(points)-1)]
 
-def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub):
+# function to update state and publish acc, steer, brake
+def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i):
 	model_type='discrete'
 	model=do_mpc.model.Model(model_type)
-	J=1000
+	J=1000 #rotational momentum
 	La=1
 	Lb=1
 	m=200
-	Cy=0.1
+	Cy=0.1 # lateral tire stiffness
 	t_s=0.01 #sample time
 	N=70
 	k=0.1
-	fn=curves[0]
-	d=derivatives[0]
-	vmax_i=velocities[0]
+	fn=curves[i] #follow i-th cubic curve
+	d=derivatives[i] #derivative of i-th cubic fn
+	vmax_i=velocities[i] #max velocity for between i-th and i+1-th point
 	#state variables
 	psi=model.set_variable(var_type='_x',var_name='psi',shape=(1,1))
 	xc=model.set_variable(var_type='_x',var_name='xc',shape=(1,1))
@@ -140,7 +144,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	mpc.u0['omega']=x_0[-1]
 	mpc.set_initial_guess()
 	mpc.reset_history()
-	for i in range(10):
+	for i in range(20):
 		u0=mpc.make_step(x_0)
 		if u0[0][0]>=0:
 			acc_pub.publish(u0[0][0])
@@ -156,28 +160,55 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	return x_0,x,y,vel,acc,steer_rate
 
 def v_callback(v_arr,x_0):
-	velocities[0]=v_arr.data[0]
+	velocities=np.full((points.shape[0],1),2)
 	x=np.array(x_0[1])
 	y=np.array(x_0[2])
 	v=np.array(x_0[3])
-	a=np.array(x_0[7])
+	acc=np.array(x_0[7])
 	s_r=np.array(x_0[-1])
-	bcurves=trajectory_gen(points)
-	derivatives=derivative_list(points)
-	x_0,x,y,v,a,s_r=control(x_0,x,y,v,a,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub)
-	plt.plot(x,y)
-	plt.scatter(points[:,0],points[:,1])
+	first,rest=points[:20,:],points[19:,:] # get first 20 points ("first"), and store remaining in "rest"
+	fig,ax=plt.subplots(2,1)
+	while(True):
+		bcurves=trajectory_gen(first)
+		derivatives=derivative_list(first)
+		for i in range(first.shape[0]-1):
+			x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i)
+			x_0[0]=0
+		ax[0].plot(x,y)
+		ax[0].plot(points[:,0],points[:,1],'bo')
+		ax[1].plot(x,v)
+		ax[1].scatter(points[:,0],velocities)
+		plt.show(block=False)
+		plt.close()
+		if(rest.shape[0]<=20):
+			break
+		first,rest=rest[:20,:],rest[19:,:] #get next 20 points to "first"
+	print(rest.shape)
+	bcurves=trajectory_gen(rest)
+	derivatives=derivative_list(rest)
+	for i in range(rest.shape[0]-1):
+		x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i)
+		x_0[0]=0
+	ax[0].plot(x,y)
+	ax[0].plot(points[:,0],points[:,1],'bo')
+	ax[0].set(xlabel='x',ylabel='y')
+	ax[1].plot(x,v)
+	ax[1].plot(points[:,0],velocities)
+	ax[1].set(xlabel='x',ylabel='v')
 	plt.show()
 
 
+
 def path_callback(path):
-	for i in range(2):
+	global points
+	points=np.zeros((len(path.poses),2))
+	for i in range(len(path.poses)):
 		points[i][0]=path.poses[i].pose.position.y-path.poses[0].pose.position.y
 		points[i][1]=path.poses[i].pose.position.x-path.poses[0].pose.position.x
+		
 
 x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
 velocities=[1.5]
-points=np.zeros((2,2))
 all_points=[]
 rospy.init_node('debug_node',anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
