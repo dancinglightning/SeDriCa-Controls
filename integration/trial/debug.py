@@ -12,6 +12,7 @@ import do_mpc
 from casadi import *
 import matplotlib.pyplot as plt
 import csv
+from do_mpc.data import save_results, load_results
 
 def get_bezier_coef(points):
     n = len(points) - 1
@@ -74,7 +75,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	m=200
 	Cy=0.1 # lateral tire stiffness
 	t_s=0.01 #sample time
-	N=70
+	N=60
 	k=0.1
 	fn=curves[i] #follow i-th cubic curve
 	d=derivatives[i] #derivative of i-th cubic fn
@@ -144,7 +145,7 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	mpc.u0['omega']=x_0[-1]
 	mpc.set_initial_guess()
 	mpc.reset_history()
-	for i in range(20):
+	for i in range(50):
 		u0=mpc.make_step(x_0)
 		if u0[0][0]>=0:
 			acc_pub.publish(u0[0][0])
@@ -159,8 +160,51 @@ def control(x_0,x,y,vel,acc,steer_rate,curves,derivatives,points,velocities,acc_
 	steer_rate=vertcat(steer_rate,simulator.data['_u','omega',-1])
 	return x_0,x,y,vel,acc,steer_rate
 
-def v_callback(v_arr,x_0):
-	velocities=np.full((points.shape[0],1),2)
+def v_callback(v_arr):
+	for i in range(len(v_arr.data)):
+		velocities.append(v_arr.data[i])
+	global x_0
+	x_0[0]=0
+	x_0[1]=points[0][0]
+	x_0[2]=points[0][1]
+	x=np.array(x_0[1])
+	y=np.array(x_0[2])
+	v=np.array(x_0[3])
+	acc=np.array(x_0[7])
+	s_r=np.array(x_0[-1])
+	bcurves=trajectory_gen(points[:20,:])
+	derivatives=derivative_list(points[:20,:])
+	fig,ax=plt.subplots(2,1)
+	ax[0].set(xlabel='x',ylabel='y')
+	ax[1].set(xlabel='x',ylabel='y')
+	for i in range(10):
+		x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i)
+		x_0[0]=0
+	try:
+		ax[0].plot(x,y)
+		ax[0].plot(points[:10,0],points[:10,1],'bo')
+		ax[1].plot(x,v)
+		ax[1].plot(points[:10,0],velocities[:10],'ro')
+	except:
+		ax[0].plot(points[:10,0],points[:10,1])
+	plt.show()
+
+
+'''def v_callback(v_arr,x_0):
+	#with open('vel_new.csv',mode='a') as op_file:
+		#op=csv.writer(op_file)
+	#for i in range(len(v_arr.data)):
+		#velocities.append(v_arr.data[i])
+		#	op.writerow([v_arr.data[i]])
+		#op.writerow(['##############'])
+	velocities=[]
+	with open('subscribed_vel.csv',mode='r') as ip_file:
+		csv_reader=csv.reader(ip_file,delimiter=',')
+		i=0
+		for row in csv_reader:
+			if row[0][0]=='#':
+				break
+			velocities.append(float(row[0]))
 	x=np.array(x_0[1])
 	y=np.array(x_0[2])
 	v=np.array(x_0[3])
@@ -168,34 +212,39 @@ def v_callback(v_arr,x_0):
 	s_r=np.array(x_0[-1])
 	first,rest=points[:20,:],points[19:,:] # get first 20 points ("first"), and store remaining in "rest"
 	fig,ax=plt.subplots(2,1)
+	ax[0].set(xlabel='x',ylabel='y')
+	ax[1].set(xlabel='x',ylabel='v')
+	j=1
 	while(True):
 		bcurves=trajectory_gen(first)
 		derivatives=derivative_list(first)
 		for i in range(first.shape[0]-1):
-			x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i)
+			x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,first,velocities,acc_pub,brake_pub,steer_pub,i)
 			x_0[0]=0
-		ax[0].plot(x,y)
-		ax[0].plot(points[:,0],points[:,1],'bo')
-		ax[1].plot(x,v)
-		ax[1].scatter(points[:,0],velocities)
-		plt.show(block=False)
-		plt.close()
+		try:
+			ax[0].plot(x,y)
+			ax[0].plot(points[:20*j,0],points[:20*j,1],'ro')
+			ax[1].plot(x,v)
+			ax[1].scatter(points[:,0],velocities)
+		except:
+			ax[0].plot(x,y)
+		plt.show()
+		fig.clear()
 		if(rest.shape[0]<=20):
 			break
 		first,rest=rest[:20,:],rest[19:,:] #get next 20 points to "first"
+		j+=1
 	print(rest.shape)
 	bcurves=trajectory_gen(rest)
 	derivatives=derivative_list(rest)
 	for i in range(rest.shape[0]-1):
-		x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,points,velocities,acc_pub,brake_pub,steer_pub,i)
+		x_0,x,y,v,acc,s_r=control(x_0,x,y,v,acc,s_r,bcurves,derivatives,rest,velocities,acc_pub,brake_pub,steer_pub,i)
 		x_0[0]=0
 	ax[0].plot(x,y)
 	ax[0].plot(points[:,0],points[:,1],'bo')
-	ax[0].set(xlabel='x',ylabel='y')
 	ax[1].plot(x,v)
 	ax[1].plot(points[:,0],velocities)
-	ax[1].set(xlabel='x',ylabel='v')
-	plt.show()
+	plt.show()'''
 
 
 
@@ -205,16 +254,28 @@ def path_callback(path):
 	for i in range(len(path.poses)):
 		points[i][0]=path.poses[i].pose.position.y-path.poses[0].pose.position.y
 		points[i][1]=path.poses[i].pose.position.x-path.poses[0].pose.position.x
+	'''if points is None:
+					points=new_points
+				else:
+					if points.all()==new_points.all():
+						return
+					points=new_points'''
+	'''with open('coordinates.csv',mode='a') as op_file:
+					op=csv.writer(op_fil	e)
+					for i in range(points.shape[0]):
+						op.writerow([points[i][0],points[i][1]])
+					op.writerow(["########"])'''
+
 		
 
-x_0=np.array([[0],[0],[0],[1.5],[0],[0],[0],[0],[0]])
-velocities=[1.5]
-all_points=[]
+x_0=np.array([[0],[0],[0],[0.01],[0],[0],[0],[0],[0]])
+velocities=[]
+points=None
 rospy.init_node('debug_node',anonymous=True)
 acc_pub = rospy.Publisher('acceleration', Float32, queue_size=10)
 brake_pub = rospy.Publisher('brake', Float32, queue_size=10)
 steer_pub = rospy.Publisher('steer', Float32, queue_size=10)
 rate=rospy.Rate(10)
-vel_sub=rospy.Subscriber("/velocity_plan",Float64MultiArray,v_callback,x_0)
-path_sub=rospy.Subscriber("/A_star_path",Path,path_callback)
+vel_sub=rospy.Subscriber("/velocity_plan",Float64MultiArray,v_callback,queue_size=1)
+path_sub=rospy.Subscriber("/A_star_path",Path,path_callback,queue_size=1)
 rospy.spin()
