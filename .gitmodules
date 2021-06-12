@@ -1,0 +1,3 @@
+[submodule "controls/CarND-MPC-Project"]
+	path = controls/CarND-MPC-Project
+	url = https://github.com/Jeremy26/mpc-controller.git
