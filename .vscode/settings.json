@@ -8,5 +8,5 @@
     "explorer.confirmDelete": false,
     "python.autoComplete.extraPaths": ["./src"],
     "[python]": {},
-    "jupyter.jupyterServerType": "remote"
+    "jupyter.jupyterServerType": "local"
 }
