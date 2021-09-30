@@ -1,6 +1,6 @@
 {
     "editor.suggestSelection": "first",
-    "python.analysis.logLevel": "true",
+    "python.analysis.logLevel": "Trace",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
     "java.configuration.checkProjectSettingsExclusions": false,
     "java.semanticHighlighting.enabled": true,
@@ -8,5 +8,6 @@
     "python.autoComplete.extraPaths": ["./src"],
     "[python]": {},
     "jupyter.jupyterServerType": "local",
-    "jupyter.jupyterCommandLineArguments": []
+    "jupyter.jupyterCommandLineArguments": [],
+    "jupyter.logging.level":"debug"
 }
