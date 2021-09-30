@@ -7,5 +7,6 @@
     "explorer.confirmDelete": false,
     "python.autoComplete.extraPaths": ["./src"],
     "[python]": {},
-    "jupyter.jupyterServerType": "local"
+    "jupyter.jupyterServerType": "local",
+    "jupyter.jupyterCommandLineArguments": []
 }
