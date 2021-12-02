@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import scipy
 import rospy
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import Float32
